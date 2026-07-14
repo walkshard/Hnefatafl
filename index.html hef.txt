@@ -1,0 +1,742 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+   <title>Viking Chess - Hnefatafl</title>
+   <style>
+       :root {
+           --bg-color: #1a1a1a;
+           --panel-color: #2a2a2a;
+           --accent-color: #d4af37;
+           --board-dark: #8b5a2b;
+           --board-light: #cd853f;
+           --attacker-color: #111111;
+           --defender-color: #f0ead6;
+           --king-color: #d4af37;
+           --text-light: #e0e0e0;
+       }
+
+       * {
+           box-sizing: border-box;
+           margin: 0;
+           padding: 0;
+           user-select: none;
+           -webkit-user-select: none;
+       }
+
+       body {
+           background-color: var(--bg-color);
+           color: var(--text-light);
+           font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+           display: flex;
+           flex-direction: column;
+           align-items: center;
+           justify-content: center;
+           min-height: 100vh;
+           overflow: hidden;
+           padding: 10px;
+       }
+
+       #menu, #game-container {
+           width: 100%;
+           max-width: 450px;
+           background: var(--panel-color);
+           border-radius: 12px;
+           padding: 20px;
+           box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+           text-align: center;
+       }
+
+       #game-container {
+           display: none;
+       }
+
+       h1 {
+           color: var(--accent-color);
+           margin-bottom: 20px;
+           font-size: 1.8rem;
+           letter-spacing: 2px;
+       }
+
+       h2 {
+           font-size: 1.2rem;
+           margin-bottom: 15px;
+       }
+
+       .btn {
+           background: #3a3a3a;
+           color: white;
+           border: 2px solid #555;
+           padding: 12px 24px;
+           margin: 8px 0;
+           width: 100%;
+           border-radius: 8px;
+           font-size: 1rem;
+           cursor: pointer;
+           transition: all 0.2s ease;
+       }
+
+       .btn:active, .btn.active {
+           background: var(--accent-color);
+           color: black;
+           border-color: var(--accent-color);
+       }
+
+       .btn-group {
+           display: flex;
+           gap: 10px;
+           margin-bottom: 15px;
+       }
+
+       #status-bar {
+           display: flex;
+           justify-content: space-between;
+           align-items: center;
+           margin-bottom: 15px;
+           font-weight: bold;
+           font-size: 0.95rem;
+       }
+
+       #turn-indicator {
+           padding: 4px 12px;
+           border-radius: 4px;
+           background: #333;
+       }
+
+       /* Board Styling */
+       #board-wrapper {
+           width: 100%;
+           position: relative;
+           margin-bottom: 15px;
+       }
+
+       #board-wrapper::after {
+           content: "";
+           display: block;
+           padding-bottom: 100%;
+       }
+
+       #board {
+           position: absolute;
+           top: 0; left: 0; width: 100%; height: 100%;
+           display: grid;
+           grid-template-columns: repeat(9, 1fr);
+           grid-template-rows: repeat(9, 1fr);
+           border: 3px solid #000;
+           background-color: #000;
+           gap: 1px;
+       }
+
+       .cell {
+           background-color: var(--board-light);
+           position: relative;
+           display: flex;
+           align-items: center;
+           justify-content: center;
+           cursor: pointer;
+       }
+
+       .cell.dark-cell {
+           background-color: var(--board-dark);
+       }
+
+       .cell.throne, .cell.corner {
+           background-color: #4a3b32 !important;
+       }
+
+       .cell.throne::before, .cell.corner::before {
+           content: "✕";
+           position: absolute;
+           color: rgba(255,255,255,0.15);
+           font-size: 1.2rem;
+       }
+
+       .cell.selected {
+           background-color: rgba(212, 175, 55, 0.5) !important;
+       }
+
+       .cell.valid-move::after {
+           content: "";
+           width: 30%;
+           height: 30%;
+           background: rgba(0, 255, 0, 0.4);
+           border-radius: 50%;
+           position: absolute;
+       }
+
+       /* Piece Styling */
+       .piece {
+           width: 80%;
+           height: 80%;
+           border-radius: 50%;
+           box-shadow: 0 4px 6px rgba(0,0,0,0.4);
+           position: relative;
+           z-index: 2;
+           transition: transform 0.1s ease;
+       }
+
+       .piece.attacker {
+           background: radial-gradient(circle at 30% 30%, #444, var(--attacker-color));
+           border: 2px solid #000;
+       }
+
+       .piece.defender {
+           background: radial-gradient(circle at 30% 30%, #fff, var(--defender-color));
+           border: 2px solid #b5ad93;
+       }
+
+       .piece.king {
+           background: radial-gradient(circle at 30% 30%, #ffe891, var(--king-color));
+           border: 2px solid #8c6f12;
+           border-radius: 30%;
+       }
+
+       .piece.king::after {
+           content: "👑";
+           font-size: 0.7rem;
+           position: absolute;
+           top: 50%; left: 50%;
+           transform: translate(-50%, -50%);
+       }
+
+       #thinking-overlay {
+           position: absolute;
+           top: 0; left: 0; width: 100%; height: 100%;
+           background: rgba(0,0,0,0.4);
+           display: none;
+           align-items: center;
+           justify-content: center;
+           z-index: 10;
+           border-radius: 4px;
+           font-weight: bold;
+           color: var(--accent-color);
+           font-size: 1.2rem;
+       }
+   </style>
+</head>
+<body>
+
+   <!-- Main Menu Setup -->
+   <div id="menu">
+       <h1>HNEFATAFL</h1>
+       <h2>Viking Chess (9x9 Tablut)</h2>
+       
+       <button class="btn" id="btn-2p">Player vs Player</button>
+       <hr style="margin: 15px 0; border: 0; border-top: 1px solid #444;">
+       
+       <h3>Single Player vs PC</h3>
+       <div class="btn-group">
+           <button class="btn active" id="side-def">Play Defenders</button>
+           <button class="btn" id="side-att">Play Attackers</button>
+       </div>
+       
+       <div class="btn-group">
+           <button class="btn" id="diff-easy">Easy</button>
+           <button class="btn active" id="diff-med">Medium</button>
+           <button class="btn" id="diff-hard">Hard</button>
+       </div>
+       
+       <button class="btn" id="btn-1p" style="background: var(--accent-color); color: black; font-weight: bold;">Start AI Game</button>
+   </div>
+
+   <!-- Arena Layout -->
+   <div id="game-container">
+       <div id="status-bar">
+           <button class="btn" id="btn-back" style="width: auto; margin: 0; padding: 6px 12px; font-size: 0.85rem;">Menu</button>
+           <div id="turn-indicator">Defenders Turn</div>
+           <button class="btn" id="btn-reset" style="width: auto; margin: 0; padding: 6px 12px; font-size: 0.85rem;">Reset</button>
+       </div>
+       
+       <div id="board-wrapper">
+           <div id="board"></div>
+           <div id="thinking-overlay">PC is planning...</div>
+       </div>
+   </div>
+
+   <script>
+       // Constants & Types
+       const SIZE = 9;
+       const EMPTY = 0, ATTACKER = 1, DEFENDER = 2, KING = 3;
+       
+       const CORNERS = [0, 8, 72, 80];
+       const THRONE = 40;
+
+       // Game state variables
+       let board = new Array(81).fill(EMPTY);
+       let turn = ATTACKER; // Attackers always move first in standard Tablut
+       let isAI = false;
+       let aiSide = ATTACKER; // Side handled by AI engine
+       let aiDifficulty = 'medium'; // 'easy' | 'medium' | 'hard'
+       let selectedIndex = null;
+       let validMoves = [];
+       let gameOver = false;
+
+       // UI Selectors
+       const menu = document.getElementById('menu');
+       const gameContainer = document.getElementById('game-container');
+       const boardEl = document.getElementById('board');
+       const turnIndicator = document.getElementById('turn-indicator');
+       const thinkingOverlay = document.getElementById('thinking-overlay');
+
+       // Initial Board Generation (Standard Tablut Variant Layout)
+       function initBoardSetup() {
+           board.fill(EMPTY);
+           board[THRONE] = KING;
+           
+           // Corrected symmetrical cross for Defenders
+           [22, 31, 38, 39, 41, 42, 49, 58].forEach(i => board[i] = DEFENDER);
+           
+           // Corrected symmetrical T-shapes on the edges for Attackers
+           [3, 4, 5, 13, 27, 35, 36, 37, 43, 44, 45, 53, 67, 75, 76, 77].forEach(i => board[i] = ATTACKER);
+       }
+
+       // Setup Grid System DOM Elements
+       function buildGridUI() {
+           boardEl.innerHTML = '';
+           for (let i = 0; i < 81; i++) {
+               const cell = document.createElement('div');
+               cell.classList.add('cell');
+               
+               let r = Math.floor(i / SIZE);
+               let c = i % SIZE;
+               if ((r + c) % 2 === 1) cell.classList.add('dark-cell');
+               
+               if (i === THRONE) cell.classList.add('throne');
+               else if (CORNERS.includes(i)) cell.classList.add('corner');
+               
+               cell.dataset.index = i;
+               cell.addEventListener('click', () => handleCellInteraction(i));
+               boardEl.appendChild(cell);
+           }
+       }
+
+       function updateGridUI() {
+           for (let i = 0; i < 81; i++) {
+               const cell = boardEl.children[i];
+               cell.innerHTML = '';
+               cell.className = 'cell';
+               
+               let r = Math.floor(i / SIZE);
+               let c = i % SIZE;
+               if ((r + c) % 2 === 1) cell.classList.add('dark-cell');
+               if (i === THRONE) cell.classList.add('throne');
+               else if (CORNERS.includes(i)) cell.classList.add('corner');
+
+               if (i === selectedIndex) cell.classList.add('selected');
+               if (validMoves.includes(i)) cell.classList.add('valid-move');
+
+               if (board[i] !== EMPTY) {
+                   const piece = document.createElement('div');
+                   piece.classList.add('piece');
+                   if (board[i] === ATTACKER) piece.classList.add('attacker');
+                   else if (board[i] === DEFENDER) piece.classList.add('defender');
+                   else if (board[i] === KING) piece.classList.add('king');
+                   cell.appendChild(piece);
+               }
+           }
+
+           if (gameOver) return;
+           
+           if (turn === ATTACKER) {
+               turnIndicator.textContent = "Attackers Turn";
+               turnIndicator.style.background = "#111";
+               turnIndicator.style.color = "#fff";
+           } else {
+               turnIndicator.textContent = "Defenders Turn";
+               turnIndicator.style.background = "#f0ead6";
+               turnIndicator.style.color = "#000";
+           }
+       }
+
+       // Move Validation Rules Implementation
+       function getLegalMoves(fromIdx, state = board) {
+           const p = state[fromIdx];
+           if (p === EMPTY) return [];
+           
+           let moves = [];
+           let r = Math.floor(fromIdx / SIZE);
+           let c = fromIdx % SIZE;
+
+           const directions = [[-1,0], [1,0], [0,-1], [0,1]];
+
+           for (let [dr, dc] of directions) {
+               let currR = r + dr;
+               let currC = c + dc;
+               while (currR >= 0 && currR < SIZE && currC >= 0 && currC < SIZE) {
+                   let targetIdx = currR * SIZE + currC;
+                   if (state[targetIdx] !== EMPTY) break;
+
+                   // Non-king pieces cannot land on Throne or Escape corners
+                   if (p !== KING && (targetIdx === THRONE || CORNERS.includes(targetIdx))) {
+                       currR += dr; currC += dc;
+                       continue; 
+                   }
+
+                   moves.push(targetIdx);
+                   currR += dr;
+                   currC += dc;
+               }
+           }
+           return moves;
+       }
+
+       function getAllLegalMoves(playerColor, state = board) {
+           let moves = [];
+           for (let i = 0; i < 81; i++) {
+               if ((playerColor === ATTACKER && state[i] === ATTACKER) || 
+                   (playerColor === DEFENDER && (state[i] === DEFENDER || state[i] === KING))) {
+                   let targets = getLegalMoves(i, state);
+                   for (let t of targets) {
+                       moves.push({ from: i, to: t });
+                   }
+               }
+           }
+           return moves;
+       }
+
+       // Processing mechanics for legal target landings and standard/king environmental threat updates
+       function executeMove(from, to, state = board) {
+           const piece = state[from];
+           state[to] = piece;
+           state[from] = EMPTY;
+
+           // Capture resolution logic block
+           let r = Math.floor(to / SIZE);
+           let c = to % SIZE;
+           const neighbors = [[-1,0], [1,0], [0,-1], [0,1]];
+
+           for (let [dr, dc] of neighbors) {
+               let nR = r + dr, nC = c + dc;
+               let enemyIdx = nR * SIZE + nC;
+
+               if (nR >= 0 && nR < SIZE && nC >= 0 && nC < SIZE && state[enemyIdx] !== EMPTY) {
+                   let enemyPiece = state[enemyIdx];
+                   
+                   // Determine relationship mapping parameters
+                   if (piece === ATTACKER && (enemyPiece === DEFENDER || enemyPiece === KING)) {
+                       let fR = nR + dr, fC = nC + dc;
+                       let flankIdx = fR * SIZE + fC;
+                       if (fR >= 0 && fR < SIZE && fC >= 0 && fC < SIZE) {
+                           let flankPiece = state[flankIdx];
+                           if (enemyPiece === KING) {
+                               if (checkKingCapture(enemyIdx, state)) state[enemyIdx] = EMPTY;
+                           } else if (flankPiece === ATTACKER || flankIdx === THRONE || CORNERS.includes(flankIdx)) {
+                               state[enemyIdx] = EMPTY; // Standard capture logic
+                           }
+                       }
+                   } else if ((piece === DEFENDER || piece === KING) && enemyPiece === ATTACKER) {
+                       let fR = nR + dr, fC = nC + dc;
+                       let flankIdx = fR * SIZE + fC;
+                       if (fR >= 0 && fR < SIZE && fC >= 0 && fC < SIZE) {
+                           let flankPiece = state[flankIdx];
+                           if (flankPiece === DEFENDER || flankPiece === KING || flankIdx === THRONE || CORNERS.includes(flankIdx)) {
+                               state[enemyIdx] = EMPTY;
+                           }
+                       }
+                   }
+               }
+           }
+       }
+
+       // Dynamic edge evaluation check rule sets specific to King piece capture configurations
+       function checkKingCapture(kingIdx, state) {
+           let r = Math.floor(kingIdx / SIZE);
+           let c = kingIdx % SIZE;
+           const directions = [[-1,0], [1,0], [0,-1], [0,1]];
+
+           if (kingIdx === THRONE) {
+               // Must be surrounded on all 4 sides when on throne
+               for (let [dr, dc] of directions) {
+                   let idx = (r + dr) * SIZE + (c + dc);
+                   if (state[idx] !== ATTACKER) return false;
+               }
+               return true;
+           } else if (r === 4 && (c === 3 || c === 5) || c === 4 && (r === 3 || r === 5)) {
+               // Adjacent to throne: throne counts as hostile anchor point
+               for (let [dr, dc] of directions) {
+                   let idx = (r + dr) * SIZE + (c + dc);
+                   if (idx !== THRONE && state[idx] !== ATTACKER) return false;
+               }
+               return true;
+           } else {
+               // Field state standard flank checks apply
+               for (let [dr, dc] of [[-1,0],[0,-1]]) {
+                   let idx1 = (r + dr) * SIZE + (c + dc);
+                   let idx2 = (r - dr) * SIZE + (c - dc);
+                   if (r+dr >= 0 && r+dr < SIZE && c+dc >= 0 && c+dc < SIZE && r-dr >= 0 && r-dr < SIZE && c-dc >= 0 && c-dc < SIZE) {
+                       if ((state[idx1] === ATTACKER || CORNERS.includes(idx1)) && (state[idx2] === ATTACKER || CORNERS.includes(idx2))) {
+                           return true;
+                       }
+                   }
+               }
+           }
+           return false;
+       }
+
+       function checkWinConditions(state = board) {
+           // Find King
+           let kingIdx = state.indexOf(KING);
+           if (kingIdx === -1) return ATTACKER; // King captured
+           if (CORNERS.includes(kingIdx)) return DEFENDER; // King escaped
+           return null;
+       }
+
+       // Input Management Loop
+       function handleCellInteraction(idx) {
+           if (gameOver || (isAI && turn === aiSide)) return;
+
+           if (validMoves.includes(idx) && selectedIndex !== null) {
+               executeMove(selectedIndex, idx, board);
+               selectedIndex = null;
+               validMoves = [];
+               
+               let winner = checkWinConditions(board);
+               if (winner) {
+                   endGame(winner);
+                   return;
+               }
+
+               turn = (turn === ATTACKER) ? DEFENDER : ATTACKER;
+               updateGridUI();
+
+               if (isAI && turn === aiSide) {
+                   setTimeout(triggerAIMove, 250);
+               }
+           } else {
+               if (board[idx] === EMPTY) {
+                   selectedIndex = null;
+                   validMoves = [];
+                   updateGridUI();
+                   return;
+               }
+               if (turn === ATTACKER && board[idx] !== ATTACKER) return;
+               if (turn === DEFENDER && board[idx] !== DEFENDER && board[idx] !== KING) return;
+
+               selectedIndex = idx;
+               validMoves = getLegalMoves(idx, board);
+               updateGridUI();
+           }
+       }
+
+       function endGame(winner) {
+           gameOver = true;
+           updateGridUI();
+           setTimeout(() => {
+               alert(winner === ATTACKER ? "Game Over! Attackers Win!" : "Victory! Defenders Escaped!");
+           }, 100);
+       }
+
+       // AI Engine Architecture Block
+       function triggerAIMove() {
+           thinkingOverlay.style.display = 'flex';
+           
+           setTimeout(() => {
+               let depth = 2;
+               if (aiDifficulty === 'easy') depth = 1;
+               else if (aiDifficulty === 'hard') depth = 4; // High deep calculation ceiling
+
+               let bestMove = selectBestAIMove(board, turn, depth);
+               
+               thinkingOverlay.style.display = 'none';
+
+               if (bestMove) {
+                   executeMove(bestMove.from, bestMove.to, board);
+                   let winner = checkWinConditions(board);
+                   if (winner) {
+                       endGame(winner);
+                       return;
+                   }
+                   turn = (turn === ATTACKER) ? DEFENDER : ATTACKER;
+                   updateGridUI();
+               }
+           }, 50);
+       }
+
+       function selectBestAIMove(state, activeTurn, depth) {
+           let moves = getAllLegalMoves(activeTurn, state);
+           if (moves.length === 0) return null;
+
+           // Fallback fail-safe array baseline initialization
+           let selectedMove = moves[Math.floor(Math.random() * moves.length)];
+           
+           if (aiDifficulty === 'easy') {
+               // Easy: Prioritize direct immediate captures, otherwise default to random choice
+               let structuralMax = -Infinity;
+               for (let move of moves) {
+                   let stateClone = [...state];
+                   let countBefore = stateClone.filter(c => c !== EMPTY).length;
+                   executeMove(move.from, move.to, stateClone);
+                   let countAfter = stateClone.filter(c => c !== EMPTY).length;
+                   let value = countBefore - countAfter;
+                   if (value > structuralMax) {
+                       structuralMax = value;
+                       selectedMove = move;
+                   }
+               }
+               return selectedMove;
+           }
+
+           // Alpha-Beta Minimax Implementation (Medium / Hard)
+           let alpha = -Infinity;
+           let beta = Infinity;
+           
+           if (activeTurn === DEFENDER) {
+               let maxEval = -Infinity;
+               for (let move of moves) {
+                   let stateClone = [...state];
+                   executeMove(move.from, move.to, stateClone);
+                   let evaluation = minimaxEval(stateClone, depth - 1, alpha, beta, ATTACKER);
+                   if (evaluation > maxEval) {
+                       maxEval = evaluation;
+                       selectedMove = move;
+                   }
+                   alpha = Math.max(alpha, evaluation);
+               }
+           } else {
+               let minEval = Infinity;
+               for (let move of moves) {
+                   let stateClone = [...state];
+                   executeMove(move.from, move.to, stateClone);
+                   let evaluation = minimaxEval(stateClone, depth - 1, alpha, beta, DEFENDER);
+                   if (evaluation < minEval) {
+                       minEval = evaluation;
+                       selectedMove = move;
+                   }
+                   beta = Math.min(beta, evaluation);
+               }
+           }
+           return selectedMove;
+       }
+
+       function minimaxEval(state, depth, alpha, beta, activePlayer) {
+           let winner = checkWinConditions(state);
+           if (winner === DEFENDER) return 100000 + depth;
+           if (winner === ATTACKER) return -100000 - depth;
+           if (depth === 0) return heuristicScore(state);
+
+           let moves = getAllLegalMoves(activePlayer, state);
+           if (moves.length === 0) {
+               return activePlayer === DEFENDER ? -100000 : 100000;
+           }
+
+           if (activePlayer === DEFENDER) {
+               let maxEval = -Infinity;
+               for (let move of moves) {
+                   let clone = [...state];
+                   executeMove(move.from, move.to, clone);
+                   let ev = minimaxEval(clone, depth - 1, alpha, beta, ATTACKER);
+                   maxEval = Math.max(maxEval, ev);
+                   alpha = Math.max(alpha, ev);
+                   if (beta <= alpha) break;
+               }
+               return maxEval;
+           } else {
+               let minEval = Infinity;
+               for (let move of moves) {
+                   let clone = [...state];
+                   executeMove(move.from, move.to, clone);
+                   let ev = minimaxEval(clone, depth - 1, alpha, beta, DEFENDER);
+                   minEval = Math.min(minEval, ev);
+                   beta = Math.min(beta, ev);
+                   if (beta <= alpha) break;
+               }
+               return minEval;
+           }
+       }
+
+       // Positional Assessment Matrix Engine Heuristics
+       function heuristicScore(state) {
+           let score = 0;
+           let kingIdx = state.indexOf(KING);
+           
+           if (kingIdx === -1) return -100000;
+
+           let attackersCount = 0;
+           let defendersCount = 0;
+           
+           for (let i = 0; i < 81; i++) {
+               if (state[i] === ATTACKER) attackersCount++;
+               else if (state[i] === DEFENDER) defendersCount++;
+           }
+
+           score += defendersCount * 400;
+           score -= attackersCount * 300;
+
+           // Evaluate King escape vectors
+           let kR = Math.floor(kingIdx / SIZE);
+           let kC = Math.floor(kingIdx % SIZE);
+           
+           let minDistanceToCorner = Math.min(
+               kR + kC,                 // Top-Left corner
+               kR + (8 - kC),           // Top-Right corner
+               (8 - kR) + kC,           // Bottom-Left corner
+               (8 - kR) + (8 - kC)      // Bottom-Right corner
+           );
+           
+           score -= minDistanceToCorner * 40;
+
+           // Value king escape mobility profiles
+           let kingEscapeMoves = getLegalMoves(kingIdx, state);
+           score += kingEscapeMoves.length * 15;
+
+           return score;
+       }
+
+       // Navigation UI Wiring Initialization Setup Routine Hooks
+       document.getElementById('btn-2p').addEventListener('click', () => {
+           isAI = false;
+           launchArenaView();
+       });
+
+       document.getElementById('btn-1p').addEventListener('click', () => {
+           isAI = true;
+           aiSide = document.getElementById('side-def').classList.contains('active') ? ATTACKER : DEFENDER;
+           launchArenaView();
+       });
+
+       // Config Toggle Controls Hook Handlers
+       document.getElementById('side-def').addEventListener('click', function() {
+           this.classList.add('active');
+           document.getElementById('side-att').classList.remove('active');
+       });
+       document.getElementById('side-att').addEventListener('click', function() {
+           this.classList.add('active');
+           document.getElementById('side-def').classList.remove('active');
+       });
+
+       ['easy', 'med', 'hard'].forEach(d => {
+           document.getElementById(`diff-${d}`).addEventListener('click', function() {
+               ['easy', 'med', 'hard'].forEach(x => document.getElementById(`diff-${x}`).classList.remove('active'));
+               this.classList.add('active');
+               aiDifficulty = d;
+           });
+       });
+
+       document.getElementById('btn-back').addEventListener('click', () => {
+           gameContainer.style.display = 'none';
+           menu.style.display = 'block';
+       });
+
+       document.getElementById('btn-reset').addEventListener('click', () => {
+           launchArenaView();
+       });
+
+       function launchArenaView() {
+           menu.style.display = 'none';
+           gameContainer.style.display = 'block';
+           gameOver = false;
+           selectedIndex = null;
+           validMoves = [];
+           turn = ATTACKER; 
+           initBoardSetup();
+           buildGridUI();
+           updateGridUI();
+
+           if (isAI && turn === aiSide) {
+               setTimeout(triggerAIMove, 400);
+           }
+       }
+   </script>
+</body>
+</html>
